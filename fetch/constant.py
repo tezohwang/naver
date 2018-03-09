@@ -10,26 +10,16 @@ DATABASE = {
         'db_name': 'autobidding'
     }
 }
-FB_APP = {
-    'app_id': '1633923886632047',
-    'app_secret': '4ec9658c91944be5fe71e0c20fcb3786'
+
+FIELDS = {
+    'campaign': '["impCnt","clkCnt","ctr","cpc","ccnt","salesAmt"]',
+    'adgroup': '["impCnt","clkCnt","ctr","cpc","ccnt","salesAmt"]',
+    'keyword': '["impCnt","clkCnt","ctr","cpc","avgRnk","ccnt","recentAvgRnk","recentAvgCpc","salesAmt"]',
 }
 
-FETCH = {
-    # yesterday
-    'from_days':1,
-    # minimum impression limit
-    'min_imp_limit':10
-}
+# today / yesterday / last7days / last30days / lastweek / lastmonth / lastquarter
+DATEPRESET = 'today'
 
-MAIL = {
-    'login_id': 'sb63w1@gmail.com',
-    'login_pw': 'xowhghkd1!A',
-    'from': 'sb63w1@gmail.com',
-    'recipients': [
-        'support@wizpace.com',
-        'tony.hwang@wizpace.com',
-        # 'danbee@wizpace.com',
-        # 'jusung@wizpace.com'
-    ]
+TIME = {
+    'sleep_time': 0.01
 }

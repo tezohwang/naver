@@ -7,3 +7,15 @@ def connect_db(name):
     db = client[DATABASE[name]['db_name']]
     print("{} - db connected".format(name))
     return db
+
+def save_accounts(accounts):
+    pass
+
+def save_campaigns(campaigns):
+    pass
+
+def save_adgroups(adgroups):
+    pass
+
+def save_insights(insights):
+    pass
