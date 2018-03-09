@@ -8,6 +8,8 @@ from .api.adgroup import *
 from .api.keyword import *
 from .api.stat import *
 
+import asyncio, datetime
+
 # Route Views
 def index(request):
     context = {}
@@ -94,6 +96,50 @@ def fetch_process():
                 adgroups = fetch_adgroups(account, campaign)
                 if adgroups:
                     for adgroup in adgroups:
-                        keywords = fetch_keywords(account, adgroup)
-                        print(len(keywords))
+                        keywords = async_fetch_keywords(account, campaign, adgroup)
+                        # keywords = fetch_keywords(account, adgroup)
+                        # print(keywords)
+                        
     return print("fetch_process done!")
+
+
+def async_fetch_keywords(account, campaign, adgroup):
+    params = {'nccAdgroupId':adgroup['id']}
+    keywords = get_keywords_list(account, params)
+    ids = [keyword['nccKeywordId'] for keyword in keywords]
+    ids_set = [ids[i:i+100] for i in range(0, len(ids), 100)]
+    params = {
+        'fields': FIELDS['keyword'],
+        'datePreset': DATEPRESET,
+    }
+    stats = [async_get_by_ids(account, campaign, adgroup, params, ids) for ids in ids_set]
+    # print(stats)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(asyncio.wait(stats))
+    return stats[0]
+
+async def async_get_by_ids(account, campaign, adgroup, params, ids):
+    params['ids'] = ids
+    time_now = str(int(round(time.time() * 1000)))
+    http_method = "GET"
+    request_uri = "/stats"
+    headers = {
+        'X-Timestamp': time_now,
+        'X-API-KEY': account['x_api_key'],
+        'X-Customer': account['network_id'],
+        'X-Signature': gen_signature(time_now, http_method, request_uri, account['x_secrete']),
+    }
+    response = requests.get('https://api.naver.com' + request_uri, headers=headers, params=params)
+    json_res_data = json.loads(response.text)
+    if json_res_data['data']:
+        for data in json_res_data['data']:
+            data['network_id'] = account['network_id']
+            data['campaign_id'] = campaign['id']
+            data['adgroup_id'] = adgroup['id']
+            data['dateStart'] = datetime.datetime.now()
+            data['dateEnd'] = datetime.datetime.now()
+            data['date'] = datetime.datetime.now().strftime('%Y%h%m')
+        db = connect_db('diana')
+        nvtest = db['nvtest']
+        nvtest.insert_many(json_res_data['data'])
+    return json_res_data['data']
