@@ -33,8 +33,23 @@ def fetch_accounts():
                 'network_id': str(client['clientCustomerId']),
                 'name': client['clientLoginId'],
                 'x_api_key': user['x_api_key'],
-                'x_secrete': user['x_secrete']
+                'x_secrete': user['x_secrete'],
             })
+    nvtest_accounts = db['nvtest_accounts']
+    for account in accounts:
+        nvtest_accounts.update_one(
+            {'network_id': account['network_id']},
+            {
+                '$set':{
+                    'user_id':account['user_id'],
+                    'type': 'naver',
+                    'name': account['name'],
+                    'x_api_key': account['x_api_key'],
+                    'x_secrete': account['x_secrete'],
+                },
+            },
+            upsert=True,
+        )
     return accounts
 
 def fetch_campaigns(account):
@@ -48,6 +63,14 @@ def fetch_campaigns(account):
         }
         stats = get_by_ids(account, params)
         if stats['data']:
+            for data in stats['data']:
+                data['network_id'] = account['network_id']
+                data['dateStart'] = datetime.datetime.now()
+                data['dateEnd'] = datetime.datetime.now()
+                data['date'] = datetime.datetime.now().strftime('%Y%m%d')
+            db = connect_db('diana')
+            nvtest_campaigns = db['nvtest_campaigns']
+            nvtest_campaigns.insert_many(stats['data'])
             return stats['data']
     return []
 
@@ -63,13 +86,21 @@ def fetch_adgroups(account, campaign):
         }
         stats = get_by_ids(account, params)
         if stats['data']:
+            for data in stats['data']:
+                data['network_id'] = account['network_id']
+                data['campaign_id'] = campaign['id']
+                data['dateStart'] = datetime.datetime.now()
+                data['dateEnd'] = datetime.datetime.now()
+                data['date'] = datetime.datetime.now().strftime('%Y%m%d')
+            db = connect_db('diana')
+            nvtest_adgroups = db['nvtest_adgroups']
+            nvtest_adgroups.insert_many(stats['data'])
             return stats['data']
     return []
 
 def fetch_keywords(account, adgroup):
     params = {'nccAdgroupId':adgroup['id']}
     keywords = get_keywords_list(account, params)
-    # print(keywords)
     ids = [keyword['nccKeywordId'] for keyword in keywords]
     ids_set = [ids[i:i+100] for i in range(0, len(ids), 100)]
     stats_set = []
@@ -97,9 +128,6 @@ def fetch_process():
                 if adgroups:
                     for adgroup in adgroups:
                         keywords = async_fetch_keywords(account, campaign, adgroup)
-                        # keywords = fetch_keywords(account, adgroup)
-                        # print(keywords)
-                        
     return print("fetch_process done!")
 
 
@@ -113,7 +141,6 @@ def async_fetch_keywords(account, campaign, adgroup):
         'datePreset': DATEPRESET,
     }
     stats = [async_get_by_ids(account, campaign, adgroup, params, ids) for ids in ids_set]
-    # print(stats)
     loop = asyncio.get_event_loop()
     loop.run_until_complete(asyncio.wait(stats))
     return stats[0]
@@ -138,8 +165,37 @@ async def async_get_by_ids(account, campaign, adgroup, params, ids):
             data['adgroup_id'] = adgroup['id']
             data['dateStart'] = datetime.datetime.now()
             data['dateEnd'] = datetime.datetime.now()
-            data['date'] = datetime.datetime.now().strftime('%Y%h%m')
+            data['date'] = datetime.datetime.now().strftime('%Y%m%d')
         db = connect_db('diana')
-        nvtest = db['nvtest']
-        nvtest.insert_many(json_res_data['data'])
+        nvtest_keywords = db['nvtest_keywords']
+        # nvtest_keywords.insert_many(json_res_data['data'])
+        for data in json_res_data['data']:
+            nvtest_keywords.update_one(
+                {
+                    'id':data['id'],
+                    'date':data['date']
+                },
+                {
+                    '$set':{
+                        'network_id':data['network_id'],
+                        'campaign_id':data['campaign_id'],
+                        'adgroup_id':data['adgroup_id'],
+                        'dateStart':data['dateStart'],
+                        'dateEnd':data['dateEnd'],
+                        'date':data['date'],
+                        'impCnt':data['impCnt'],
+                        'clkCnt':data['clkCnt'],
+                        'ctr':data['ctr'],
+                        'cpc':data['cpc'],
+                        'avgRnk':data['avgRnk'],
+                        'ccnt':data['ccnt'],
+                        'recentAvgRnk':data['recentAvgRnk'],
+                        'recentAvgCpc':data['recentAvgCpc'],
+                        'salesAmt':data['salesAmt'],
+                    }
+                },
+                upsert=True
+            )
     return json_res_data['data']
+
+
