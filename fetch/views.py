@@ -36,6 +36,7 @@ def fetch_accounts():
                 'x_secrete': user['x_secrete'],
             })
     update_accounts(accounts)
+    print("fetch_accounts done - {}".format(datetime.datetime.now()))
     return accounts
 
 def update_accounts(accounts):
@@ -55,7 +56,8 @@ def update_accounts(accounts):
             },
             upsert=True,
         )
-    return ("update_accounts done")
+        print("update_accounts done - {}".format(datetime.datetime.now()))
+    return accounts
 
 def fetch_campaigns(account):
     campaigns = get_campaigns_list(account)
@@ -68,6 +70,7 @@ def fetch_campaigns(account):
             'datePreset': DATEPRESET,
         }
         stats = get_by_ids(account, params)
+        print("get_by_ids(account) done - {}".format(datetime.datetime.now()))
         if stats['data']:
             for data in stats['data']:
                 data['user_id'] = account['user_id']
@@ -75,9 +78,19 @@ def fetch_campaigns(account):
                 data['dateStart'] = datetime.datetime.now()
                 data['dateEnd'] = datetime.datetime.now()
                 data['date'] = datetime.datetime.now().strftime('%Y%m%d')
+            stats['data'] = combine_campaigns(campaigns, stats['data'])
             update_campaigns(stats['data'])
             return stats['data']
     return []
+
+def combine_campaigns(campaigns, data):
+    for _data in data:
+        for campaign in campaigns:
+            if campaign['nccCampaignId'] == _data['id']:
+                _data.update(campaign)
+    # print(data)
+    print("combine_campaigns done - {}".format(datetime.datetime.now()))
+    return data
 
 def update_campaigns(campaigns):
     db = connect_db('diana')
@@ -100,11 +113,24 @@ def update_campaigns(campaigns):
                     'cpc':campaign['cpc'],
                     'ccnt':campaign['ccnt'],
                     'salesAmt':campaign['salesAmt'],
+                    'nccCampaignId':campaign['nccCampaignId'],
+                    'customerId':campaign['customerId'],
+                    'name':campaign['name'],
+                    'userLock':campaign['userLock'],
+                    'regTm':campaign['regTm'],
+                    'editTm':campaign['editTm'],
+                    'dailyBudget':campaign['dailyBudget'],
+                    'useDailyBudget':campaign['useDailyBudget'],
+                    'status':campaign['status'],
+                    'statusReason':campaign['statusReason'],
+                    'expectCost':campaign['expectCost'],
+                    'migType':campaign['migType'],
                 }
             },
             upsert=True,
         )
-    return print("update_campaigns done")
+    print("update_campaigns done - {}".format(datetime.datetime.now()))
+    return campaigns
 
 def fetch_adgroups(account, campaign):
     params = {'nccCampaignId':campaign['id']}
@@ -125,9 +151,20 @@ def fetch_adgroups(account, campaign):
                 data['dateStart'] = datetime.datetime.now()
                 data['dateEnd'] = datetime.datetime.now()
                 data['date'] = datetime.datetime.now().strftime('%Y%m%d')
+            stats['data'] = combine_adgroups(adgroups, stats['data'])
             update_adgroups(stats['data'])
+            print("fetch_adgroups done - {}".format(datetime.datetime.now()))
             return stats['data']
     return []
+
+def combine_adgroups(adgroups, data):
+    for _data in data:
+        for adgroup in adgroups:
+            if adgroup['nccAdgroupId'] == _data['id']:
+                _data.update(adgroup)
+    # print(data)
+    print("combine_adgroups done - {}".format(datetime.datetime.now()))
+    return data
 
 def update_adgroups(adgroups):
     db = connect_db('diana')
@@ -150,11 +187,37 @@ def update_adgroups(adgroups):
                     'cpc':adgroup['cpc'],
                     'ccnt':adgroup['ccnt'],
                     'salesAmt':adgroup['salesAmt'],
+                    'nccAdgroupId':adgroup['nccAdgroupId'],
+                    'customerId':adgroup['customerId'],
+                    'nccCampaignId':adgroup['nccCampaignId'],
+                    'mobileChannelId':adgroup['mobileChannelId'],
+                    'pcChannelId':adgroup['pcChannelId'],
+                    'bidAmt':adgroup['bidAmt'],
+                    'name':adgroup['name'],
+                    'userLock':adgroup['userLock'],
+                    'useDailyBudget':adgroup['useDailyBudget'],
+                    'useKeywordPlus':adgroup['useKeywordPlus'],
+                    'keywordPlusWeight':adgroup['keywordPlusWeight'],
+                    'contentsNetworkBidAmt':adgroup['contentsNetworkBidAmt'],
+                    'useCntsNetworkBidAmt':adgroup['useCntsNetworkBidAmt'],
+                    'mobileNetworkBidWeight':adgroup['mobileNetworkBidWeight'],
+                    'pcNetworkBidWeight':adgroup['pcNetworkBidWeight'],
+                    'dailyBudget':adgroup['dailyBudget'],
+                    'budgetLock':adgroup['budgetLock'],
+                    'regTm':adgroup['regTm'],
+                    'editTm':adgroup['editTm'],
+                    'targetSummary':adgroup['targetSummary'],
+                    'pcChannelKey':adgroup['pcChannelKey'],
+                    'status':adgroup['status'],
+                    'statusReason':adgroup['statusReason'],
+                    'expectCost':adgroup['expectCost'],
+                    'migType':adgroup['migType'],
                 }
             },
             upsert=True,
         )
-    return print("update_adgroups done")
+    print("update_adgroups done - {}".format(datetime.datetime.now()))
+    return adgroups
 
 def fetch_keywords(account, adgroup):
     params = {'nccAdgroupId':adgroup['id']}
@@ -192,18 +255,20 @@ def fetch_process():
 def async_fetch_keywords(account, campaign, adgroup):
     params = {'nccAdgroupId':adgroup['id']}
     keywords = get_keywords_list(account, params)
+    # print(keywords)
     ids = [keyword['nccKeywordId'] for keyword in keywords]
     ids_set = [ids[i:i+100] for i in range(0, len(ids), 100)]
     params = {
         'fields': FIELDS['keyword'],
         'datePreset': DATEPRESET,
     }
-    stats = [async_get_by_ids(account, campaign, adgroup, params, ids) for ids in ids_set]
+    stats = [async_get_by_ids(account, campaign, adgroup, keywords, params, ids) for ids in ids_set]
     loop = asyncio.get_event_loop()
     loop.run_until_complete(asyncio.wait(stats))
+    print("async_fetch_keywords done - {}".format(datetime.datetime.now()))
     return stats[0]
 
-async def async_get_by_ids(account, campaign, adgroup, params, ids):
+async def async_get_by_ids(account, campaign, adgroup, keywords, params, ids):
     params['ids'] = ids
     time_now = str(int(round(time.time() * 1000)))
     http_method = "GET"
@@ -224,8 +289,20 @@ async def async_get_by_ids(account, campaign, adgroup, params, ids):
             data['dateStart'] = datetime.datetime.now()
             data['dateEnd'] = datetime.datetime.now()
             data['date'] = datetime.datetime.now().strftime('%Y%m%d')
+        json_res_data['data'] = combine_keywords(keywords, json_res_data['data'])
         await update_keywords(json_res_data['data'])
+    print("async_get_by_ids done - {}".format(datetime.datetime.now()))
     return json_res_data['data']
+
+def combine_keywords(keywords, data):
+    for _data in data:
+        for keyword in keywords:
+            if keyword['nccKeywordId'] == _data['id']:
+                _data.update(keyword)
+    # print(data)
+    print("combine_keywords done - {}".format(datetime.datetime.now()))
+    return data
+
 
 async def update_keywords(keywords):
     db = connect_db('diana')
@@ -254,8 +331,23 @@ async def update_keywords(keywords):
                     'recentAvgRnk':data['recentAvgRnk'],
                     'recentAvgCpc':data['recentAvgCpc'],
                     'salesAmt':data['salesAmt'],
+                    'nccKeywordId':data['nccKeywordId'],
+                    'keyword':data['keyword'],
+                    'customerId':data['customerId'],
+                    'nccAdgroupId':data['nccAdgroupId'],
+                    'nccCampaignId':data['nccCampaignId'],
+                    'userLock':data['userLock'],
+                    'inspectStatus':data['inspectStatus'],
+                    'bidAmt':data['bidAmt'],
+                    'useGroupBidAmt':data['useGroupBidAmt'],
+                    'regTm':data['regTm'],
+                    'editTm':data['editTm'],
+                    'status':data['status'],
+                    'statusReason':data['statusReason'],
+                    'nccQi':data['nccQi'],
                 }
             },
             upsert=True
         )
-    return print("update_keywords done")
+    print("update_keywords done - {}".format(datetime.datetime.now()))
+    return keywords

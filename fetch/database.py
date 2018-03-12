@@ -2,10 +2,13 @@ from pymongo import MongoClient
 
 from .constant import DATABASE
 
+import datetime
+
+
 def connect_db(name):
     client = MongoClient(DATABASE[name]['db_uri'])
     db = client[DATABASE[name]['db_name']]
-    print("{} - db connected".format(name))
+    print("{} - db connected - {}".format(name, datetime.datetime.now()))
     return db
 
 def save_accounts(accounts):
