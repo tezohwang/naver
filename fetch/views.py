@@ -109,7 +109,7 @@ def fetch_campaigns(account, db):
                 data['dateEnd'] = datetime.datetime.now()
                 data['date'] = datetime.datetime.now().strftime('%Y%m%d')
             stats['data'] = combine_campaigns(campaigns, stats['data'])
-            update_campaigns(stats['data'])
+            update_campaigns(stats['data'], db)
             return stats['data'], db
     return [], db
 
@@ -233,7 +233,7 @@ def fetch_adgroups(account, campaign, db):
                 data['dateEnd'] = datetime.datetime.now()
                 data['date'] = datetime.datetime.now().strftime('%Y%m%d')
             stats['data'] = combine_adgroups(adgroups, stats['data'])
-            # update_adgroups(stats['data'])
+            update_adgroups(stats['data'], db)
             print("fetch_adgroups done - {}".format(datetime.datetime.now()))
             return stats['data'], db
     return [], db
@@ -385,6 +385,9 @@ def fetch_keywords(account, adgroup):
     return []
 
 def fetch_process():
+    start_time = time.time()
+    #------------------------
+
     accounts, db = fetch_accounts()
     for account in accounts:
         campaigns, db = fetch_campaigns(account, db)
@@ -393,10 +396,14 @@ def fetch_process():
                 adgroups, db = fetch_adgroups(account, campaign, db)
                 if adgroups:
                     for adgroup in adgroups:
-                        keywords, db = async_fetch_keywords(account, campaign, adgroup, db)
+                        keywords = async_fetch_keywords(account, campaign, adgroup, db)
+    
+    #------------------------
+    print("start_time", start_time)
+    print("--- %s seconds ---" %(time.time() - start_time))
     return print("fetch_process done!")
 
-def async_fetch_keywords(account, campaign, adgroup):
+def async_fetch_keywords(account, campaign, adgroup, db):
     params = {'nccAdgroupId':adgroup['id']}
     keywords = get_keywords_list(account, params)
     if not keywords:
@@ -408,7 +415,7 @@ def async_fetch_keywords(account, campaign, adgroup):
         'fields': FIELDS['keyword'],
         'datePreset': DATEPRESET,
     }
-    stats = [async_get_by_ids(account, campaign, adgroup, keywords, params, ids) for ids in ids_set]
+    stats = [async_get_by_ids(account, campaign, adgroup, keywords, params, ids, db) for ids in ids_set]
     # print(stats)
     loop = asyncio.get_event_loop()
     loop.run_until_complete(asyncio.wait(stats))
@@ -434,7 +441,7 @@ def async_first_fetch_keywords(account, campaign, adgroup, db):
     # print("async_first_fetch_keywords done - {}".format(datetime.datetime.now()))
     return stats[0], db
 
-async def async_get_by_ids(account, campaign, adgroup, keywords, params, ids):
+async def async_get_by_ids(account, campaign, adgroup, keywords, params, ids, db):
     params['ids'] = ids
     time_now = str(int(round(time.time() * 1000)))
     http_method = "GET"
@@ -456,7 +463,7 @@ async def async_get_by_ids(account, campaign, adgroup, keywords, params, ids):
             data['dateEnd'] = datetime.datetime.now()
             data['date'] = datetime.datetime.now().strftime('%Y%m%d')
         json_res_data['data'] = combine_keywords(keywords, json_res_data['data'])
-        # await update_keywords(json_res_data['data'])
+        update_keywords(json_res_data['data'], db)
     print("async_get_by_ids done - {}".format(datetime.datetime.now()))
     return json_res_data['data']
 
