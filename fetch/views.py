@@ -8,7 +8,7 @@ from .api.adgroup import *
 from .api.keyword import *
 from .api.stat import *
 
-import asyncio, datetime
+import asyncio, datetime, time
 
 # Route Views
 def index(request):
@@ -20,6 +20,8 @@ def fetch_accounts():
     db = connect_db('diana')
     accounts = []
     users = list(db['users'].find({'type': 'naver'}))
+    if not users:
+        return [], db
     for user in users:
         if not 'name' in user:
             user['name'] = 'main'
@@ -35,9 +37,9 @@ def fetch_accounts():
                 'x_api_key': user['x_api_key'],
                 'x_secrete': user['x_secrete'],
             })
-    # update_accounts(accounts)
+    update_accounts(accounts)
     print("fetch_accounts done - {}".format(datetime.datetime.now()))
-    return accounts
+    return accounts, db
 
 def first_fetch_accounts(network_id):
     db = connect_db('diana')
@@ -48,6 +50,7 @@ def first_fetch_accounts(network_id):
     }))
     if not 'name' in user:
         user['name'] = 'main'
+    accounts.append(user)
     params = {'type':'MYCLIENTS'}
     clients = get_clients_list(user, params)
     for client in clients:
@@ -59,7 +62,7 @@ def first_fetch_accounts(network_id):
             'x_api_key': user['x_api_key'],
             'x_secrete': user['x_secrete'],
         })
-    # update_accounts(accounts)
+    update_accounts(accounts)
     print("fetch_accounts done - {}".format(datetime.datetime.now()))
     return accounts, db
 
@@ -83,8 +86,10 @@ def update_accounts(accounts):
         print("update_accounts done - {}".format(datetime.datetime.now()))
     return accounts
 
-def fetch_campaigns(account):
+def fetch_campaigns(account, db):
     campaigns = get_campaigns_list(account)
+    if not campaigns:
+        return [], db
     # print(campaigns)
     ids = [campaign['nccCampaignId'] for campaign in campaigns]
     if ids:
@@ -104,16 +109,17 @@ def fetch_campaigns(account):
                 data['dateEnd'] = datetime.datetime.now()
                 data['date'] = datetime.datetime.now().strftime('%Y%m%d')
             stats['data'] = combine_campaigns(campaigns, stats['data'])
-            # update_campaigns(stats['data'])
-            return stats['data']
-    return []
+            update_campaigns(stats['data'])
+            return stats['data'], db
+    return [], db
 
 def first_fetch_campaigns(account, db):
     campaigns = get_campaigns_list(account)
     # print(campaigns)
     if not campaigns:
-        return []
+        return [], db
     for campaign in campaigns:
+        # print(campaign)
         params = {
             'id':campaign['nccCampaignId'],
             'fields': FIELDS['campaign'],
@@ -124,6 +130,8 @@ def first_fetch_campaigns(account, db):
         print("get_by_ids(account) done - {}".format(datetime.datetime.now()))
         # print(stats)
         if 'data' in stats:
+            if not stats['data']:
+                continue
             for data in stats['data']:
                 data['user_id'] = account['user_id']
                 data['network_id'] = account['network_id']
@@ -143,9 +151,9 @@ def first_fetch_campaigns(account, db):
                 data['statusReason'] = campaign['statusReason']
                 data['expectCost'] = campaign['expectCost']
                 data['migType'] = campaign['migType']
-            update_campaigns(stats['data'], db)
-            return stats['data'], db
-    return [], db
+            # update_campaigns(stats['data'], db)
+            insert_campaigns(stats['data'], db)
+    return campaigns, db
 
 def combine_campaigns(campaigns, data):
     for _data in data:
@@ -155,6 +163,12 @@ def combine_campaigns(campaigns, data):
     # print(data)
     print("combine_campaigns done - {}".format(datetime.datetime.now()))
     return data
+
+def insert_campaigns(campaigns, db):
+    nvtest_campaigns = db['nvtest_campaigns']
+    nvtest_campaigns.insert_many(campaigns)
+    # print("insert_campaigns done")
+    return db
 
 def update_campaigns(campaigns, db):
     # db = connect_db('diana')
@@ -196,9 +210,11 @@ def update_campaigns(campaigns, db):
     print("update_campaigns done - {}".format(datetime.datetime.now()))
     return campaigns, db
 
-def fetch_adgroups(account, campaign):
+def fetch_adgroups(account, campaign, db):
     params = {'nccCampaignId':campaign['id']}
     adgroups = get_adgroups_list(account, params)
+    if not adgroups:
+        return [], db
     # print(adgroups)
     ids = [adgroup['nccAdgroupId'] for adgroup in adgroups]
     if ids:
@@ -219,16 +235,17 @@ def fetch_adgroups(account, campaign):
             stats['data'] = combine_adgroups(adgroups, stats['data'])
             # update_adgroups(stats['data'])
             print("fetch_adgroups done - {}".format(datetime.datetime.now()))
-            return stats['data']
-    return []
+            return stats['data'], db
+    return [], db
 
 def first_fetch_adgroups(account, campaign, db):
-    params = {'nccCampaignId':campaign['id']}
+    params = {'nccCampaignId':campaign['nccCampaignId']}
     adgroups = get_adgroups_list(account, params)
     # print(adgroups)
     if not adgroups:
-        return []
+        return [], db
     for adgroup in adgroups:
+        # print(adgroup)
         params = {
             'id':adgroup['nccAdgroupId'],
             'fields': FIELDS['adgroup'],
@@ -239,6 +256,8 @@ def first_fetch_adgroups(account, campaign, db):
         print("get_by_ids(account) done - {}".format(datetime.datetime.now()))
         # print(stats)
         if 'data' in stats:
+            if not stats['data']:
+                continue
             for data in stats['data']:
                 data['user_id'] = account['user_id']
                 data['network_id'] = account['network_id']
@@ -246,7 +265,7 @@ def first_fetch_adgroups(account, campaign, db):
                 data['dateEnd'] = datetime.datetime.strptime(data['dateEnd'], "%Y-%m-%d")
                 data['date'] = data['dateEnd'].strftime('%Y%m%d')
                 data['id'] = adgroup['nccAdgroupId']
-                data['campaign_id'] = campaign['id']
+                data['campaign_id'] = campaign['nccCampaignId']
                 data['nccCampaignId'] = adgroup['nccCampaignId']
                 data['nccAdgroupId'] = adgroup['nccAdgroupId']
                 data['customerId'] = adgroup['customerId']
@@ -272,10 +291,10 @@ def first_fetch_adgroups(account, campaign, db):
                 data['pcChannelKey'] = adgroup['pcChannelKey']
                 data['expectCost'] = adgroup['expectCost']
                 data['migType'] = adgroup['migType']
-            update_adgroups(stats['data'], db)
+            # update_adgroups(stats['data'], db)
+            insert_adgroups(stats['data'], db)
             print("first_fetch_adgroups done - {}".format(datetime.datetime.now()))
-            return stats['data'], db
-    return [], db
+    return adgroups, db
 
 def combine_adgroups(adgroups, data):
     for _data in data:
@@ -285,6 +304,12 @@ def combine_adgroups(adgroups, data):
     # print(data)
     print("combine_adgroups done - {}".format(datetime.datetime.now()))
     return data
+
+def insert_adgroups(adgroups, db):
+    nvtest_adgroups = db['nvtest_adgroups']
+    nvtest_adgroups.insert_many(adgroups)
+    # print("insert_adgroups done")
+    return db
 
 def update_adgroups(adgroups, db):
     # db = connect_db('diana')
@@ -360,21 +385,22 @@ def fetch_keywords(account, adgroup):
     return []
 
 def fetch_process():
-    accounts = fetch_accounts()
+    accounts, db = fetch_accounts()
     for account in accounts:
-        campaigns = fetch_campaigns(account)
+        campaigns, db = fetch_campaigns(account, db)
         if campaigns:
             for campaign in campaigns:
-                adgroups = fetch_adgroups(account, campaign)
+                adgroups, db = fetch_adgroups(account, campaign, db)
                 if adgroups:
                     for adgroup in adgroups:
-                        keywords = async_fetch_keywords(account, campaign, adgroup)
+                        keywords, db = async_fetch_keywords(account, campaign, adgroup, db)
     return print("fetch_process done!")
-
 
 def async_fetch_keywords(account, campaign, adgroup):
     params = {'nccAdgroupId':adgroup['id']}
     keywords = get_keywords_list(account, params)
+    if not keywords:
+        return []
     # print(keywords)
     ids = [keyword['nccKeywordId'] for keyword in keywords]
     ids_set = [ids[i:i+100] for i in range(0, len(ids), 100)]
@@ -390,9 +416,11 @@ def async_fetch_keywords(account, campaign, adgroup):
     return stats[0]
 
 def async_first_fetch_keywords(account, campaign, adgroup, db):
-    params = {'nccAdgroupId':adgroup['id']}
+    params = {'nccAdgroupId':adgroup['nccAdgroupId']}
     keywords = get_keywords_list(account, params)
-    ids = [keyword['nccKeywordId'] for keyword in keywords]
+    if not keywords:
+        return [], db
+    # ids = [keyword['nccKeywordId'] for keyword in keywords]
     # print(ids)
     params = {
         'fields': FIELDS['keyword'],
@@ -400,7 +428,7 @@ def async_first_fetch_keywords(account, campaign, adgroup, db):
         'timeIncrement': '1',
     }
     stats = [async_get_by_id(account, campaign, adgroup, keyword, params, db) for keyword in keywords]
-    # print(stats)
+    print(stats)
     loop = asyncio.get_event_loop()
     loop.run_until_complete(asyncio.wait(stats))
     # print("async_first_fetch_keywords done - {}".format(datetime.datetime.now()))
@@ -452,8 +480,8 @@ async def async_get_by_id(account, campaign, adgroup, keyword, params, db):
         for data in json_res_data['data']:
             data['id'] = keyword['nccKeywordId']
             data['network_id'] = account['network_id']
-            data['campaign_id'] = campaign['id']
-            data['adgroup_id'] = adgroup['id']
+            data['campaign_id'] = campaign['nccCampaignId']
+            data['adgroup_id'] = adgroup['nccAdgroupId']
             data['dateStart'] = datetime.datetime.strptime(data['dateStart'], "%Y-%m-%d")
             data['dateEnd'] = datetime.datetime.strptime(data['dateEnd'], "%Y-%m-%d")
             data['date'] = data['dateEnd'].strftime('%Y%m%d')
@@ -472,7 +500,8 @@ async def async_get_by_id(account, campaign, adgroup, keyword, params, db):
             data['statusReason'] = keyword['statusReason']
             data['nccQi'] = keyword['nccQi']
         # await update_keywords(json_res_data['data'], db)
-        update_keywords(json_res_data['data'], db)
+        # update_keywords(json_res_data['data'], db)
+        insert_keywords(json_res_data['data'], db)
     # print("async_get_by_id done - {}".format(datetime.datetime.now()))
     return json_res_data['data'], db
 
@@ -485,8 +514,12 @@ def combine_keywords(keywords, data):
     print("combine_keywords done - {}".format(datetime.datetime.now()))
     return data
 
+def insert_keywords(keywords, db):
+    nvtest_keywords = db['nvtest_keywords']
+    nvtest_keywords.insert_many(keywords)
+    # print("insert_many_keywords done")
+    return db
 
-# async def update_keywords(keywords, db):
 def update_keywords(keywords, db):
     # db = connect_db('diana')
     nvtest_keywords = db['nvtest_keywords']
@@ -536,15 +569,28 @@ def update_keywords(keywords, db):
     return keywords, db
 
 def fetch_past_all_process(network_id):
+    start_time = time.time()
+    #------------------------
+
     accounts, db = first_fetch_accounts(network_id)
+    # print(accounts)
     for account in accounts:
         campaigns, db = first_fetch_campaigns(account, db)
+        # print(campaigns)
+        # continue
         if campaigns:
             for campaign in campaigns:
                 adgroups, db = first_fetch_adgroups(account, campaign, db)
+                # print(adgroups)
+                # continue
                 if adgroups:
                     for adgroup in adgroups:
                         keywords, db = async_first_fetch_keywords(account, campaign, adgroup, db)
+    
+    #------------------------
+    print("start_time", start_time)
+    print("--- %s seconds ---" %(time.time() - start_time))
+
     return print("fetch_past_all_process done!")
 
 def get_time_range(days):
