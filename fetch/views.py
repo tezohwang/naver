@@ -18,8 +18,8 @@ def index(request):
 # Controll Views
 def fetch_accounts():
     db = connect_db('diana')
-    users = list(db['users'].find({"type": "naver"}))
     accounts = []
+    users = list(db['users'].find({'type': 'naver'}))
     for user in users:
         if not 'name' in user:
             user['name'] = 'main'
@@ -35,9 +35,33 @@ def fetch_accounts():
                 'x_api_key': user['x_api_key'],
                 'x_secrete': user['x_secrete'],
             })
-    update_accounts(accounts)
+    # update_accounts(accounts)
     print("fetch_accounts done - {}".format(datetime.datetime.now()))
     return accounts
+
+def first_fetch_accounts(network_id):
+    db = connect_db('diana')
+    accounts = []
+    user = dict(db['users'].find_one({
+        'type':'naver',
+        'network_id':network_id,
+    }))
+    if not 'name' in user:
+        user['name'] = 'main'
+    params = {'type':'MYCLIENTS'}
+    clients = get_clients_list(user, params)
+    for client in clients:
+        accounts.append({
+            'user_id': user['user_id'],
+            'type': 'naver',
+            'network_id': str(client['clientCustomerId']),
+            'name': client['clientLoginId'],
+            'x_api_key': user['x_api_key'],
+            'x_secrete': user['x_secrete'],
+        })
+    # update_accounts(accounts)
+    print("fetch_accounts done - {}".format(datetime.datetime.now()))
+    return accounts, db
 
 def update_accounts(accounts):
     db = connect_db('diana')
@@ -70,8 +94,9 @@ def fetch_campaigns(account):
             'datePreset': DATEPRESET,
         }
         stats = get_by_ids(account, params)
+        # print(stats)
         print("get_by_ids(account) done - {}".format(datetime.datetime.now()))
-        if stats['data']:
+        if 'data' in stats:
             for data in stats['data']:
                 data['user_id'] = account['user_id']
                 data['network_id'] = account['network_id']
@@ -79,9 +104,48 @@ def fetch_campaigns(account):
                 data['dateEnd'] = datetime.datetime.now()
                 data['date'] = datetime.datetime.now().strftime('%Y%m%d')
             stats['data'] = combine_campaigns(campaigns, stats['data'])
-            update_campaigns(stats['data'])
+            # update_campaigns(stats['data'])
             return stats['data']
     return []
+
+def first_fetch_campaigns(account, db):
+    campaigns = get_campaigns_list(account)
+    # print(campaigns)
+    if not campaigns:
+        return []
+    for campaign in campaigns:
+        params = {
+            'id':campaign['nccCampaignId'],
+            'fields': FIELDS['campaign'],
+            'timeRange': get_time_range(60),
+            'timeIncrement': '1',
+        }
+        stats = get_by_ids(account, params)
+        print("get_by_ids(account) done - {}".format(datetime.datetime.now()))
+        # print(stats)
+        if 'data' in stats:
+            for data in stats['data']:
+                data['user_id'] = account['user_id']
+                data['network_id'] = account['network_id']
+                data['dateStart'] = datetime.datetime.strptime(data['dateStart'], "%Y-%m-%d")
+                data['dateEnd'] = datetime.datetime.strptime(data['dateEnd'], "%Y-%m-%d")
+                data['date'] = data['dateEnd'].strftime('%Y%m%d')
+                data['id'] = campaign['nccCampaignId']
+                data['nccCampaignId'] = campaign['nccCampaignId']
+                data['customerId'] = campaign['customerId']
+                data['name'] = campaign['name']
+                data['userLock'] = campaign['userLock']
+                data['regTm'] = campaign['regTm']
+                data['editTm'] = campaign['editTm']
+                data['dailyBudget'] = campaign['dailyBudget']
+                data['useDailyBudget'] = campaign['useDailyBudget']
+                data['status'] = campaign['status']
+                data['statusReason'] = campaign['statusReason']
+                data['expectCost'] = campaign['expectCost']
+                data['migType'] = campaign['migType']
+            update_campaigns(stats['data'], db)
+            return stats['data'], db
+    return [], db
 
 def combine_campaigns(campaigns, data):
     for _data in data:
@@ -92,8 +156,8 @@ def combine_campaigns(campaigns, data):
     print("combine_campaigns done - {}".format(datetime.datetime.now()))
     return data
 
-def update_campaigns(campaigns):
-    db = connect_db('diana')
+def update_campaigns(campaigns, db):
+    # db = connect_db('diana')
     nvtest_campaigns = db['nvtest_campaigns']
     for campaign in campaigns:
         nvtest_campaigns.update_one(
@@ -130,7 +194,7 @@ def update_campaigns(campaigns):
             upsert=True,
         )
     print("update_campaigns done - {}".format(datetime.datetime.now()))
-    return campaigns
+    return campaigns, db
 
 def fetch_adgroups(account, campaign):
     params = {'nccCampaignId':campaign['id']}
@@ -144,7 +208,8 @@ def fetch_adgroups(account, campaign):
             'datePreset': DATEPRESET,
         }
         stats = get_by_ids(account, params)
-        if stats['data']:
+        # print(stats)
+        if 'data' in stats:
             for data in stats['data']:
                 data['network_id'] = account['network_id']
                 data['campaign_id'] = campaign['id']
@@ -152,10 +217,65 @@ def fetch_adgroups(account, campaign):
                 data['dateEnd'] = datetime.datetime.now()
                 data['date'] = datetime.datetime.now().strftime('%Y%m%d')
             stats['data'] = combine_adgroups(adgroups, stats['data'])
-            update_adgroups(stats['data'])
+            # update_adgroups(stats['data'])
             print("fetch_adgroups done - {}".format(datetime.datetime.now()))
             return stats['data']
     return []
+
+def first_fetch_adgroups(account, campaign, db):
+    params = {'nccCampaignId':campaign['id']}
+    adgroups = get_adgroups_list(account, params)
+    # print(adgroups)
+    if not adgroups:
+        return []
+    for adgroup in adgroups:
+        params = {
+            'id':adgroup['nccAdgroupId'],
+            'fields': FIELDS['adgroup'],
+            'timeRange': get_time_range(60),
+            'timeIncrement': '1',
+        }
+        stats = get_by_ids(account, params)
+        print("get_by_ids(account) done - {}".format(datetime.datetime.now()))
+        # print(stats)
+        if 'data' in stats:
+            for data in stats['data']:
+                data['user_id'] = account['user_id']
+                data['network_id'] = account['network_id']
+                data['dateStart'] = datetime.datetime.strptime(data['dateStart'], "%Y-%m-%d")
+                data['dateEnd'] = datetime.datetime.strptime(data['dateEnd'], "%Y-%m-%d")
+                data['date'] = data['dateEnd'].strftime('%Y%m%d')
+                data['id'] = adgroup['nccAdgroupId']
+                data['campaign_id'] = campaign['id']
+                data['nccCampaignId'] = adgroup['nccCampaignId']
+                data['nccAdgroupId'] = adgroup['nccAdgroupId']
+                data['customerId'] = adgroup['customerId']
+                data['name'] = adgroup['name']
+                data['mobileChannelId'] = adgroup['mobileChannelId']
+                data['pcChannelId'] = adgroup['pcChannelId']
+                data['bidAmt'] = adgroup['bidAmt']
+                data['useKeywordPlus'] = adgroup['useKeywordPlus']
+                data['keywordPlusWeight'] = adgroup['keywordPlusWeight']
+                data['contentsNetworkBidAmt'] = adgroup['contentsNetworkBidAmt']
+                data['useCntsNetworkBidAmt'] = adgroup['useCntsNetworkBidAmt']
+                data['mobileNetworkBidWeight'] = adgroup['mobileNetworkBidWeight']
+                data['pcNetworkBidWeight'] = adgroup['pcNetworkBidWeight']
+                data['userLock'] = adgroup['userLock']
+                data['regTm'] = adgroup['regTm']
+                data['editTm'] = adgroup['editTm']
+                data['dailyBudget'] = adgroup['dailyBudget']
+                data['useDailyBudget'] = adgroup['useDailyBudget']
+                data['budgetLock'] = adgroup['budgetLock']
+                data['status'] = adgroup['status']
+                data['statusReason'] = adgroup['statusReason']
+                data['targetSummary'] = adgroup['targetSummary']
+                data['pcChannelKey'] = adgroup['pcChannelKey']
+                data['expectCost'] = adgroup['expectCost']
+                data['migType'] = adgroup['migType']
+            update_adgroups(stats['data'], db)
+            print("first_fetch_adgroups done - {}".format(datetime.datetime.now()))
+            return stats['data'], db
+    return [], db
 
 def combine_adgroups(adgroups, data):
     for _data in data:
@@ -166,8 +286,8 @@ def combine_adgroups(adgroups, data):
     print("combine_adgroups done - {}".format(datetime.datetime.now()))
     return data
 
-def update_adgroups(adgroups):
-    db = connect_db('diana')
+def update_adgroups(adgroups, db):
+    # db = connect_db('diana')
     nvtest_adgroups = db['nvtest_adgroups']
     for adgroup in adgroups:
         nvtest_adgroups.update_one(
@@ -217,7 +337,7 @@ def update_adgroups(adgroups):
             upsert=True,
         )
     print("update_adgroups done - {}".format(datetime.datetime.now()))
-    return adgroups
+    return adgroups, db
 
 def fetch_keywords(account, adgroup):
     params = {'nccAdgroupId':adgroup['id']}
@@ -263,10 +383,28 @@ def async_fetch_keywords(account, campaign, adgroup):
         'datePreset': DATEPRESET,
     }
     stats = [async_get_by_ids(account, campaign, adgroup, keywords, params, ids) for ids in ids_set]
+    # print(stats)
     loop = asyncio.get_event_loop()
     loop.run_until_complete(asyncio.wait(stats))
     print("async_fetch_keywords done - {}".format(datetime.datetime.now()))
     return stats[0]
+
+def async_first_fetch_keywords(account, campaign, adgroup, db):
+    params = {'nccAdgroupId':adgroup['id']}
+    keywords = get_keywords_list(account, params)
+    ids = [keyword['nccKeywordId'] for keyword in keywords]
+    # print(ids)
+    params = {
+        'fields': FIELDS['keyword'],
+        'timeRange': get_time_range(60),
+        'timeIncrement': '1',
+    }
+    stats = [async_get_by_id(account, campaign, adgroup, keyword, params, db) for keyword in keywords]
+    # print(stats)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(asyncio.wait(stats))
+    # print("async_first_fetch_keywords done - {}".format(datetime.datetime.now()))
+    return stats[0], db
 
 async def async_get_by_ids(account, campaign, adgroup, keywords, params, ids):
     params['ids'] = ids
@@ -281,7 +419,7 @@ async def async_get_by_ids(account, campaign, adgroup, keywords, params, ids):
     }
     response = requests.get('https://api.naver.com' + request_uri, headers=headers, params=params)
     json_res_data = json.loads(response.text)
-    if json_res_data['data']:
+    if 'data' in json_res_data:
         for data in json_res_data['data']:
             data['network_id'] = account['network_id']
             data['campaign_id'] = campaign['id']
@@ -290,9 +428,53 @@ async def async_get_by_ids(account, campaign, adgroup, keywords, params, ids):
             data['dateEnd'] = datetime.datetime.now()
             data['date'] = datetime.datetime.now().strftime('%Y%m%d')
         json_res_data['data'] = combine_keywords(keywords, json_res_data['data'])
-        await update_keywords(json_res_data['data'])
+        # await update_keywords(json_res_data['data'])
     print("async_get_by_ids done - {}".format(datetime.datetime.now()))
     return json_res_data['data']
+
+async def async_get_by_id(account, campaign, adgroup, keyword, params, db):
+    params['id'] = keyword['nccKeywordId']
+    print(params['id'])
+    time_now = str(int(round(time.time() * 1000)))
+    http_method = "GET"
+    request_uri = "/stats"
+    headers = {
+        'X-Timestamp': time_now,
+        'X-API-KEY': account['x_api_key'],
+        'X-Customer': account['network_id'],
+        'X-Signature': gen_signature(time_now, http_method, request_uri, account['x_secrete']),
+    }
+    response = requests.get('https://api.naver.com' + request_uri, headers=headers, params=params)
+    json_res_data = json.loads(response.text)
+    # print(keyword)
+    # print(json_res_data)
+    if 'data' in json_res_data:
+        for data in json_res_data['data']:
+            data['id'] = keyword['nccKeywordId']
+            data['network_id'] = account['network_id']
+            data['campaign_id'] = campaign['id']
+            data['adgroup_id'] = adgroup['id']
+            data['dateStart'] = datetime.datetime.strptime(data['dateStart'], "%Y-%m-%d")
+            data['dateEnd'] = datetime.datetime.strptime(data['dateEnd'], "%Y-%m-%d")
+            data['date'] = data['dateEnd'].strftime('%Y%m%d')
+            data['nccKeywordId'] = keyword['nccKeywordId']
+            data['keyword'] = keyword['keyword']
+            data['customerId'] = keyword['customerId']
+            data['nccAdgroupId'] = keyword['nccAdgroupId']
+            data['nccCampaignId'] = keyword['nccCampaignId']
+            data['userLock'] = keyword['userLock']
+            data['inspectStatus'] = keyword['inspectStatus']
+            data['bidAmt'] = keyword['bidAmt']
+            data['useGroupBidAmt'] = keyword['useGroupBidAmt']
+            data['regTm'] = keyword['regTm']
+            data['editTm'] = keyword['editTm']
+            data['status'] = keyword['status']
+            data['statusReason'] = keyword['statusReason']
+            data['nccQi'] = keyword['nccQi']
+        # await update_keywords(json_res_data['data'], db)
+        update_keywords(json_res_data['data'], db)
+    # print("async_get_by_id done - {}".format(datetime.datetime.now()))
+    return json_res_data['data'], db
 
 def combine_keywords(keywords, data):
     for _data in data:
@@ -304,8 +486,9 @@ def combine_keywords(keywords, data):
     return data
 
 
-async def update_keywords(keywords):
-    db = connect_db('diana')
+# async def update_keywords(keywords, db):
+def update_keywords(keywords, db):
+    # db = connect_db('diana')
     nvtest_keywords = db['nvtest_keywords']
     # nvtest_keywords.insert_many(json_res_data['data'])
     for data in keywords:
@@ -349,5 +532,25 @@ async def update_keywords(keywords):
             },
             upsert=True
         )
-    print("update_keywords done - {}".format(datetime.datetime.now()))
-    return keywords
+    # print("update_keywords done - {}".format(datetime.datetime.now()))
+    return keywords, db
+
+def fetch_past_all_process(network_id):
+    accounts, db = first_fetch_accounts(network_id)
+    for account in accounts:
+        campaigns, db = first_fetch_campaigns(account, db)
+        if campaigns:
+            for campaign in campaigns:
+                adgroups, db = first_fetch_adgroups(account, campaign, db)
+                if adgroups:
+                    for adgroup in adgroups:
+                        keywords, db = async_first_fetch_keywords(account, campaign, adgroup, db)
+    return print("fetch_past_all_process done!")
+
+def get_time_range(days):
+    today = datetime.datetime.now()
+    today_date = today.strftime('%Y-%m-%d')
+    lastday = today - datetime.timedelta(days=days)
+    lastday_date = lastday.strftime('%Y-%m-%d')
+    time_range = '{"since":"' + lastday_date + '",' + '"until":"' + today_date + '"}'
+    return time_range
