@@ -1,4 +1,8 @@
 from django.shortcuts import render
+from django.http import HttpResponse
+from django.views.decorators.csrf import csrf_exempt
+
+from celery import shared_task
 
 from .database import *
 from .constant import *
@@ -8,12 +12,21 @@ from .api.adgroup import *
 from .api.keyword import *
 from .api.stat import *
 
-import asyncio, datetime, time
+import asyncio, datetime, time, json
 
 # Route Views
 def index(request):
     context = {}
-    return render(request, 'report/index.html', context)
+    return HttpResponse("index page")
+
+@csrf_exempt
+def first_login(request):
+    if request.method == "POST":
+        print(type(json.loads(request.body)))
+        req = json.loads(request.body)
+        fetch_past_all_process.delay(str(req['network_id']))
+        return HttpResponse("success")
+    return HttpResponse("error")
 
 # Controll Views
 def fetch_accounts():
@@ -418,6 +431,8 @@ def async_fetch_keywords(account, campaign, adgroup, db):
     stats = [async_get_by_ids(account, campaign, adgroup, keywords, params, ids, db) for ids in ids_set]
     # print(stats)
     loop = asyncio.get_event_loop()
+    # loop = asyncio.new_event_loop()
+    # asyncio.set_event_loop(loop)
     loop.run_until_complete(asyncio.wait(stats))
     print("async_fetch_keywords done - {}".format(datetime.datetime.now()))
     return stats[0]
@@ -575,6 +590,7 @@ def update_keywords(keywords, db):
     # print("update_keywords done - {}".format(datetime.datetime.now()))
     return keywords, db
 
+@shared_task
 def fetch_past_all_process(network_id):
     start_time = time.time()
     #------------------------
