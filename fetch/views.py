@@ -22,8 +22,8 @@ def index(request):
 @csrf_exempt
 def first_login(request):
     if request.method == "POST":
-        print(type(json.loads(request.body)))
-        req = json.loads(request.body)
+        # print(type(json.loads(request.body)))
+        req = json.loads(request.body.decode('utf-8'))
         fetch_past_all_process.delay(str(req['network_id']))
         return HttpResponse("success")
     return HttpResponse("error")
