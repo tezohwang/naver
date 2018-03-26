@@ -11,6 +11,7 @@ from .api.campaign import *
 from .api.adgroup import *
 from .api.keyword import *
 from .api.stat import *
+from .api.report import *
 
 import asyncio, datetime, time, json
 
@@ -929,3 +930,16 @@ def get_time_range(days):
     lastday_date = lastday.strftime('%Y-%m-%d')
     time_range = '{"since":"' + lastday_date + '",' + '"until":"' + today_date + '"}'
     return time_range
+
+def report_list():
+    start_time = time.time()
+    #------------------------
+
+    accounts, db = fetch_accounts()
+    for account in accounts:
+        get_reports_list(account)
+    
+    #------------------------
+    print("start_time", start_time)
+    print("--- %s seconds ---" %(time.time() - start_time))
+    return print("get_report_list done!")
